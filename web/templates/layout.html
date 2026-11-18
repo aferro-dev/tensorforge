@@ -1,0 +1,173 @@
+{{define "layout"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TensorForge · AI Compute</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js" defer></script>
+</head>
+<body hx-headers='{"X-CSRF-Token":"{{.CSRF}}"}' hx-boost="true" hx-history="false">
+  <aside>
+    <a class="brand" href="/ui">◈ TensorForge</a>
+    <span class="eyebrow">AI COMPUTE PLATFORM</span>
+    <nav aria-label="Workspace sections">
+      {{range .Nav}}
+      <a href="/ui?section={{.}}" hx-get="/ui/panel/{{.}}" hx-push-url="/ui?section={{.}}" hx-target="#workspace" hx-swap="innerHTML">{{title .}}</a>
+      {{end}}
+    </nav>
+    <footer>
+      <strong>{{.User.Name}}</strong><small>{{.User.Role}}</small>
+      <form action="/logout" method="post">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <button class="quiet">Sign out</button>
+      </form>
+    </footer>
+  </aside>
+  <main>
+    <header><span>WORKSPACE / LOCAL NODE</span><span class="tag">Single GPU · bounded workloads</span></header>
+    <div id="workspace">{{template "panel" .}}</div>
+  </main>
+</body>
+</html>
+{{end}}
+
+{{define "panel"}}
+<section class="page">
+  <div class="heading">
+    <div><p class="eyebrow">TENSORFORGE CONTROL PLANE</p><h1>{{title .Section}}</h1></div>
+    <a class="button quiet" href="/ui?section={{.Section}}" hx-get="/ui/panel/{{.Section}}" hx-target="#workspace">Refresh</a>
+  </div>
+  {{if .Error}}<div class="error" role="alert">{{.Error}}</div>{{end}}
+  {{if eq .Section "overview"}}
+  <p class="lede">Deploy, retrieve, adapt and measure. Every experiment keeps its provenance.</p>
+  <div class="cards">
+    <article>
+      <span>GPU telemetry</span>
+      {{if index .GPU "available"}}
+      <h2>{{index .GPU "device"}}</h2>
+      <p>{{index .GPU "used_mb"}} / {{index .GPU "total_mb"}} MiB · {{index .GPU "utilization_percent"}}% utilization</p>
+      {{else}}
+      <h2>Unavailable</h2><p>No successful GPU measurement. Check driver, container access and AI service.</p>
+      {{end}}
+    </article>
+    <article><span>Active workload</span><h2>{{if index .GPU "active_workload"}}{{index .GPU "active_workload"}}{{else}}Idle / unknown{{end}}</h2><p>Inference, training and kernel jobs share one exclusive GPU lease.</p></article>
+    <article><span>Experiment integrity</span><h2>Evidence first</h2><p>Real measurements only. View benchmark jobs for raw samples and correctness reports.</p></article>
+  </div>
+  <details><summary>Raw GPU telemetry</summary><pre>{{pretty .GPU}}</pre></details>
+  {{end}}
+
+  {{if ne .User.Role "viewer"}}
+  <div class="forms">
+    {{range .Forms}}
+    <article>
+      <h2>{{.Title}}</h2><p>{{.Description}}</p>
+      <form method="post" action="/ui/action/{{.Action}}" hx-post="/ui/action/{{.Action}}" hx-target="#result" {{if or (eq .Action "document") (eq .Action "dataset")}}enctype="multipart/form-data" hx-encoding="multipart/form-data"{{end}}>
+        <input type="hidden" name="csrf" value="{{$.CSRF}}">
+        {{range .Fields}}
+        <label>{{.Label}}
+          {{if eq .Type "textarea"}}
+          <textarea name="{{.Name}}" rows="4" {{if .Required}}required{{end}}>{{.Value}}</textarea>
+          {{else}}
+          <input type="{{.Type}}" name="{{.Name}}" value="{{.Value}}" {{if .Required}}required{{end}}>
+          {{end}}
+        </label>
+        {{end}}
+        <button type="submit">{{.Title}} <span class="htmx-indicator">· working…</span></button>
+      </form>
+    </article>
+    {{end}}
+  </div>
+  {{end}}
+  <div id="result" aria-live="polite"></div>
+
+  {{if .Output}}
+  <article><pre>{{pretty .Output}}</pre>
+    {{if eq .Section "users"}}
+    <form method="post" action="/ui/action/revoke" hx-post="/ui/action/revoke" hx-target="#result">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <label>API key ID to revoke<input name="id" required></label><button>Revoke key</button>
+    </form>
+    {{end}}
+  </article>
+  {{end}}
+
+  {{if .Rows}}
+  <div class="section-title"><h2>Records</h2><span>{{len .Rows}} shown</span></div>
+  {{range .Rows}}
+  {{$record := .}}
+  <article class="record">
+    <div class="record-head">
+      <div><strong>{{if index .Data "name"}}{{index .Data "name"}}{{else if index .Data "model_id"}}{{index .Data "model_id"}}{{else if index .Data "operation"}}{{index .Data "operation"}}{{else}}{{.Kind}}{{end}}</strong><code>{{.ID}}</code></div>
+      <span class="status status-{{.Status}}">{{.Status}}</span>
+    </div>
+    {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+    <div class="actions">
+	  {{if and (eq .Kind "document") (ne $.User.Role "viewer") (or (eq .Owner $.User.ID) (eq $.User.Role "administrator"))}}
+	  <form method="post" action="/ui/action/reindex" hx-post="/ui/action/reindex" hx-target="#result"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="quiet">Rebuild search index</button></form>
+	  {{end}}
+      {{if and (eq .Kind "model") (eq $.User.Role "administrator")}}
+      <form method="post" action="/ui/action/download" hx-post="/ui/action/download" hx-target="#result"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="quiet">Download</button></form>
+      <form method="post" action="/ui/action/start" hx-post="/ui/action/start" hx-target="#result"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button>Start</button></form>
+      <form method="post" action="/ui/action/stop" hx-post="/ui/action/stop" hx-target="#result"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="quiet">Stop</button></form>
+      {{end}}
+      {{if and (eq .Kind "job") (or (eq .Status "running") (eq .Status "queued")) (ne $.User.Role "viewer")}}
+      <form method="post" action="/ui/action/cancel" hx-post="/ui/action/cancel" hx-target="#result"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="quiet">Cancel</button></form>
+      {{end}}
+      {{if and (eq .Kind "run") (eq .Status "awaiting_approval") (eq $.User.Role "administrator")}}
+      <form method="post" action="/ui/action/approve" hx-post="/ui/action/approve" hx-target="#result"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button>Approve writes</button></form>
+      <form method="post" action="/ui/action/reject" hx-post="/ui/action/reject" hx-target="#result"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="quiet">Reject</button></form>
+      {{end}}
+    </div>
+    {{if and (eq .Kind "job") (eq .Status "running")}}
+    <details open><summary>Live progress</summary><div hx-get="/ui/jobs/{{.ID}}" hx-trigger="load, every 3s" hx-swap="innerHTML">Waiting for worker progress…</div></details>
+    {{end}}
+    {{with index .Data "result"}}
+      {{if index . "median_latency_ms"}}{{template "benchmark" .}}{{end}}
+      {{if index . "metrics"}}{{template "evaluation" .}}{{end}}
+      {{if index . "artifacts"}}
+      <details><summary>Download artifacts</summary><ul>
+      {{range index . "artifacts"}}<li><a href="/api/jobs/{{$record.ID}}/artifacts/{{.}}" hx-boost="false">{{.}}</a></li>{{end}}
+      </ul></details>
+      {{end}}
+    {{end}}
+    <details><summary>Metadata and results</summary><pre>{{pretty .Data}}</pre></details>
+  </article>
+  {{end}}
+  {{else if not .Forms}}<p class="muted">No records available for this section.</p>{{end}}
+</section>
+{{end}}
+
+{{define "benchmark"}}
+<h3>Measured kernel performance</h3>
+<table><thead><tr><th>Implementation</th><th>Median latency</th></tr></thead><tbody>
+  <tr><td>PyTorch</td><td>{{printf "%.5f" (index (index . "median_latency_ms") "pytorch")}} ms</td></tr>
+  <tr><td>Triton</td><td>{{printf "%.5f" (index (index . "median_latency_ms") "triton")}} ms</td></tr>
+</tbody></table>
+<p>Speedup: <strong>{{printf "%.3f" (index . "speedup")}}×</strong> · {{index . "repetitions"}} repetitions · {{index . "dtype"}} · shape {{index . "shape"}}</p>
+{{end}}
+
+{{define "evaluation"}}
+<h3>Baseline versus adapter</h3>
+<table><thead><tr><th>Metric</th><th>Baseline</th><th>Adapter</th></tr></thead><tbody>
+<tr><td>Exact match</td><td>{{printf "%.4f" (index (index (index . "metrics") "baseline") "exact_match")}}</td><td>{{printf "%.4f" (index (index (index . "metrics") "adapter") "exact_match")}}</td></tr>
+<tr><td>Token F1</td><td>{{printf "%.4f" (index (index (index . "metrics") "baseline") "token_f1")}}</td><td>{{printf "%.4f" (index (index (index . "metrics") "adapter") "token_f1")}}</td></tr>
+</tbody></table><p>{{index . "sample_count"}} identical evaluation inputs · seed {{index . "seed"}}</p>
+{{end}}
+
+{{define "result"}}
+<article class="result">
+  {{if .Error}}<h3>Request failed</h3><pre class="error">{{.Error}}</pre>
+  {{else}}<h3>Result</h3><pre>{{pretty .Output}}</pre><p class="muted">Refresh the section to see updated job state.</p>{{end}}
+</article>
+{{end}}
+
+{{define "login"}}
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in · TensorForge</title><link rel="stylesheet" href="/static/app.css"></head>
+<body class="login"><article><p class="brand">◈ TensorForge</p><h1>Your compute workspace</h1><p>Sign in with your personal API key.</p>
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+<form method="post" action="/login"><label>API key<input type="password" name="key" required autocomplete="current-password" minlength="32"></label><button>Sign in →</button></form><p class="muted">Self-hosted · private by default</p></article></body></html>
+{{end}}
+
+{{define "progress"}}<pre>{{pretty .}}</pre>{{end}}

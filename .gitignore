@@ -1,0 +1,12 @@
+.env
+.data/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+*.pyc
+.secrets/
+.config/
+bin/
+web/static/htmx.min.js.tmp
+tmp/

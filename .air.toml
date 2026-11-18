@@ -1,0 +1,22 @@
+root = "."
+tmp_dir = "tmp"
+env_files = [".env"]
+
+[build]
+cmd = "go build -mod=mod -o ./tmp/tensorforge ./cmd/server"
+entrypoint = ["./tmp/tensorforge"]
+include_ext = ["go", "html", "css", "js"]
+include_file = [".env", "go.mod", "go.sum"]
+exclude_dir = ["tmp", "bin", ".git", ".config", ".data", ".secrets", "tensorforge", "tests"]
+exclude_regex = ["_test\\.go$"]
+exclude_unchanged = true
+delay = 300
+stop_on_error = true
+send_interrupt = true
+kill_delay = "20s"
+
+[log]
+time = true
+
+[misc]
+clean_on_exit = false

@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=75,<83"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "tensorforge-ai"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["fastapi==0.115.12", "uvicorn[standard]==0.34.2", "httpx==0.28.1", "huggingface-hub==0.30.2", "pypdf==5.4.0", "nvidia-ml-py==12.570.86"]
+[project.optional-dependencies]
+test = ["pytest==8.3.5", "ruff==0.11.7"]
+retrieval = ["sentence-transformers==4.1.0"]
+gpu = ["torch==2.6.0", "transformers==4.51.3", "peft==0.15.2", "accelerate==1.6.0", "datasets==3.5.0", "triton==3.2.0", "numpy==2.2.4"]
+[tool.setuptools.packages.find]
+include = ["tensorforge*"]
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+[tool.ruff]
+line-length = 110
